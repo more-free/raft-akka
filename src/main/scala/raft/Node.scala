@@ -4,11 +4,6 @@ import akka.actor._
 import akka.actor.Actor.Receive
 import scala.concurrent.duration._
 
-
-class LeaderElection {
-	println("something")
-}
-
 // heart beat
 case class DoYouCopy(term : Int)
 case class Copy(term : Int)
@@ -95,35 +90,36 @@ class Node extends Actor with ActorLogging {
     
     // in case any network delay / partition, or other failure
     case RequestVote(term, candidateId) =>
-      if(term > myTerm)
-        becomeFollower(false, term)
+      checkStaleCandidate(term, myTerm)
   }
     
   def leader(myTerm : Int, heartBeatSchr : Cancellable) : Receive = {
-    case Copy(term) => 
-      if(term > myTerm) {
+  	case Copy(term) => 
+  	  checkStaleLeader(term, myTerm, heartBeatSchr)
+    case RequestVote(term, candidateId) => 
+      checkStaleLeader(term, myTerm, heartBeatSchr)
+    case DoYouCopy(term) => 
+      checkStaleLeader(term, myTerm, heartBeatSchr)
+  }
+  
+  private def checkStaleLeader(term : Int, myTerm : Int, heartBeatSchr : Cancellable) = {
+     if(term > myTerm) {
         heartBeatSchr.cancel
-        
-        println(self.path.name + " reverts to follower")
         becomeFollower(false, term)
       }
-      
-      println("leader " + self.path.name + " failed !")
-      heartBeatSchr.cancel
-      
-    
-    // in case any failure happened
-    case RequestVote(term, candidateId) => 
-      if(term > myTerm) becomeFollower(false, term)
-    case DoYouCopy(term) => 
-      if(term > myTerm) becomeFollower(false, term)
+  }
+  
+  private def checkStaleCandidate(term : Int, myTerm : Int) = {
+     if(term > myTerm)
+        becomeFollower(false, term)
   }
   
   private def becomeFollower(hasVoted : Boolean, myTerm : Int) = {
     context.become(follower(hasVoted, myTerm), true)
-    context.setReceiveTimeout(electionTimeout)
+    context.setReceiveTimeout(electionTimeout)   
     
     role = Follower
+    log.info(self.path.name + " becomes FOLLOWER at term " + myTerm)
   }
   
   private def becomeCandidate(myTerm : Int) = {
@@ -132,15 +128,17 @@ class Node extends Actor with ActorLogging {
       // send request for vote to all servers
       others.foreach(_ ! RequestVote(myTerm, id))
       // reset random election timeout
-      context.setReceiveTimeout(electionTimeout) 
+      context.setReceiveTimeout(electionTimeout)  
       
       role = Candidate
+      log.info(self.path.name + " becomes CANDIDATE at term " + myTerm)
   }
   
   private def becomeLeader(myTerm : Int) = {
 	  context.become(leader(myTerm, scheduleHeartBeat(myTerm)), true)
+	  
       role = Leader
-      println(self.path.name + " becomes leader at term " + myTerm + "!")
+      log.info(self.path.name + " becomes LEADER at term " + myTerm)
   }
   
   private def scheduleHeartBeat(term : Int) : Cancellable = {
@@ -152,25 +150,28 @@ class Node extends Actor with ActorLogging {
     
   def receive = {
     case Tick => 
-      	println(self.path.name + " becoming follower")
     	becomeFollower(false, 0)
-    case e => 
-      println("unknown msg type " + e.getClass)
   }
 }
 
 object Node {
   val heartBeatPeriod = 200 milliseconds
   val electionTimeoutRange = 1000 to 2000
-  val system = ActorSystem("raft")
-  val nodes = (1 to 5 toList) map ("node-" + _) map (n => system.actorOf(Props[Node], name = n))
+  lazy val system = ActorSystem("raft")
+  lazy val nodes = (1 to 5 toList) map ("node-" + _) map (n => system.actorOf(Props[Node], name = n))
   
   object Role extends Enumeration {
     type Role = Value
     val Follower, Candidate, Leader = Value
   }
   
-  // tick off
+  /**
+   * kick off leader election
+   */
   def start = nodes.foreach(_ ! Tick)  
+  
+  /**
+   * shut down actor system
+   */
   def stop = system.shutdown
 }
