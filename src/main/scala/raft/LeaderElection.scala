@@ -28,7 +28,7 @@ class Node extends Actor with ActorLogging {
   
   private val rnd = new java.util.Random();
   private def electionTimeout = 
-    (rnd.nextInt(electionTimeoutRange.size) + electionTimeoutRange.start ) milliseconds // 150~300 ms
+    (rnd.nextInt(electionTimeoutRange.size) + electionTimeoutRange.start ) milliseconds 
  
   private val others = nodes.filterNot(_ eq self)
   private val id = nodes.indexWhere(_ eq self)
@@ -92,16 +92,31 @@ class Node extends Actor with ActorLogging {
     // case (c), split votes ( no winner in this term, start next term ) 
     case ReceiveTimeout => 
       becomeCandidate(myTerm + 1)
+    
+    // in case any network delay / partition, or other failure
+    case RequestVote(term, candidateId) =>
+      if(term > myTerm)
+        becomeFollower(false, term)
   }
     
   def leader(myTerm : Int, heartBeatSchr : Cancellable) : Receive = {
     case Copy(term) => 
       if(term > myTerm) {
         heartBeatSchr.cancel
+        
+        println(self.path.name + " reverts to follower")
         becomeFollower(false, term)
       }
       
+      println("leader " + self.path.name + " failed !")
       heartBeatSchr.cancel
+      
+    
+    // in case any failure happened
+    case RequestVote(term, candidateId) => 
+      if(term > myTerm) becomeFollower(false, term)
+    case DoYouCopy(term) => 
+      if(term > myTerm) becomeFollower(false, term)
   }
   
   private def becomeFollower(hasVoted : Boolean, myTerm : Int) = {
