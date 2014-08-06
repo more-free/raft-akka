@@ -50,7 +50,6 @@ class Node extends Actor with ActorLogging {
       }
       
     case ReceiveTimeout => 
-      println(self.path.name + " timeout at " + myTerm)
       becomeCandidate(myTerm + 1)
   }
   
