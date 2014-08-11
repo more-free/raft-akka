@@ -3,33 +3,25 @@ package raft
 import akka.actor._
 import akka.actor.Actor.Receive
 import scala.concurrent.duration._
-
-// heart beat
-case class DoYouCopy(term: Int)
-case class Copy(term: Int) 
-
-// append log
-case class AppendEntries(term: Int, leaderId: Int, data: String)
-
-// vote
-case class RequestVote(term: Int, candidateId: Int) // request voting for candidateId
-case class Vote(term: Int) // vote for candidateId
+import Protocol._
 
 case class Tick()
 
-class Node extends Actor with ActorLogging {
-  import Node._
-  import Node.Role._
+class LeaderElection extends Actor with ActorLogging {
+  import LeaderElection._
+  import LeaderElection.Role._
 
   private val rnd = new java.util.Random();
   private def electionTimeout =
     (rnd.nextInt(electionTimeoutRange.size) + electionTimeoutRange.start) milliseconds
 
+  private var leader : ActorRef = _
+  private var role = Follower
+
   private val others = nodes.filterNot(_ eq self)
   private val id = nodes.indexWhere(_ eq self)
   private val majority = nodes.size / 2 + 1
-
-  private var role = Follower
+  private val logger = loggers(id)
 
   /**
    * Follower only responds to requests, never send requests to others.
@@ -40,6 +32,7 @@ class Node extends Actor with ActorLogging {
   def follower(hasVoted: Boolean, myTerm: Int): Receive = {
     case DoYouCopy(term) =>
       val t = math.max(myTerm, term)
+      leader = sender
       sender ! Copy(t)
       context.become(follower(hasVoted, t), true)
 
@@ -51,8 +44,21 @@ class Node extends Actor with ActorLogging {
 
     case ReceiveTimeout =>
       becomeCandidate(myTerm + 1)
-  }
-
+      
+      // for test only
+     
+      logger ! AppendEntries(index, id, 1, 1, RequestVote(9, 10), 1)
+      index += 1
+      
+    // messages for log replications
+    // TODO refactor required
+   
+    
+  } 
+  
+  private var index = 1
+  
+  
   /**
    * A candidate continues in
    * this state until one of three things happens: (a) it wins the
@@ -99,6 +105,9 @@ class Node extends Actor with ActorLogging {
       checkStaleLeader(term, myTerm, heartBeatSchr)
     case DoYouCopy(term) =>
       checkStaleLeader(term, myTerm, heartBeatSchr)
+      
+    // messages for log replication
+      
   }
 
   private def checkStaleLeader(term: Int, myTerm: Int, heartBeatSchr: Cancellable) = {
@@ -137,11 +146,12 @@ class Node extends Actor with ActorLogging {
     context.become(leader(myTerm, scheduleHeartBeat(myTerm)), true)
 
     role = Leader
+    leader = self
     log.info(self.path.name + " becomes LEADER at term " + myTerm)
   }
 
   private def scheduleHeartBeat(term: Int): Cancellable = {
-    import Node.system.dispatcher
+    import LeaderElection.system.dispatcher
     context.system.scheduler.schedule(0 milliseconds, heartBeatPeriod) {
       others.foreach(_ ! DoYouCopy(term))
     }
@@ -153,12 +163,13 @@ class Node extends Actor with ActorLogging {
   }
 }
 
-object Node {
+object LeaderElection {
   val heartBeatPeriod = 200 milliseconds
   val electionTimeoutRange = 1000 to 2000
   lazy val system = ActorSystem("raft")
-  lazy val nodes = (1 to 5 toList) map ("node-" + _) map (n => system.actorOf(Props[Node], name = n))
-
+  lazy val nodes = (1 to 5 toList) map ("node-" + _) map (n => system.actorOf(Props[LeaderElection], name = n))
+  lazy val loggers = (1 to 5 toList) map ("logger-" + _) map (n => system.actorOf(Props[LogReplication], name = n))
+  
   object Role extends Enumeration {
     type Role = Value
     val Follower, Candidate, Leader = Value
@@ -174,3 +185,5 @@ object Node {
    */
   def stop = system.shutdown
 }
+  
+  

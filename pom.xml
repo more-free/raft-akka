@@ -147,6 +147,25 @@
 			<version>5.1.31</version>
 		</dependency>
 
+		<dependency>
+			<groupId>tv.cntt</groupId>
+			<artifactId>chill-scala_2.10</artifactId>
+			<version>1.2</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.iq80.leveldb</groupId>
+			<artifactId>leveldb</artifactId>
+			<version>0.7</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.scala-lang</groupId>
+			<artifactId>scala-pickling_2.10</artifactId>
+			<version>0.8.0</version>
+		</dependency>
+
+
 
 	</dependencies>
 
