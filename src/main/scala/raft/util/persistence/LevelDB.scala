@@ -16,4 +16,21 @@ class LevelDB (dbPath : String) {
 	def close = db.close
 	def put(key : String, value : Array[Byte]) = db.put(bytes(key), value)
 	def get(key : String) = db.get(bytes(key))
+	
+	/** return 0 if log is empty */
+	def maxKey = {
+	  val iter = db.iterator
+	  var mk = "0"
+	  try {
+		iter.seekToFirst
+	  	while(iter.hasNext) {
+		    var key = asString(iter.peekNext().getKey())
+	    	if(key.toInt > mk.toInt) mk = key
+	    	iter.next
+	  	}
+	  } finally {
+	    iter.close
+	  }
+	  mk
+	}
 }

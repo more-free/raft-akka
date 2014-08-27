@@ -21,11 +21,12 @@ object Protocol {
 							 leaderId: Int, 
 							 prevLogIndex : Int, 
 							 prevLogTerm: Int, 
-							 entry : Serializable, 
+							 entry : AnyRef, 
 							 leaderCommit: Int)
 	case class AppendResult(term : Int, success : Boolean)
 	
 	// two-phase commit
-	case class Prepare
-	case class Commit
+	// phase 1 , pre-commit (or "replicate logs") re-use the AppendEntries class
+	// phase 2, commit
+	case class CommitLog
 }

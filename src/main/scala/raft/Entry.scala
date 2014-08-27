@@ -1,3 +1,3 @@
 package raft
 
-case class Entry[T]( command: T, term: Int, index: Int )
+case class Entry (term : Int, entry : AnyRef)
