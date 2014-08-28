@@ -11,8 +11,7 @@ object Protocol {
 	// vote
 	case class RequestVote(term: Int, candidateId: Int) // request voting for candidateId
 	case class Vote(term: Int) // vote for candidateId
-	
-	
+
 	/**
 	 *   protocol for log replication 
 	 */
@@ -23,10 +22,13 @@ object Protocol {
 							 prevLogTerm: Int, 
 							 entry : AnyRef, 
 							 leaderCommit: Int)
-	case class AppendResult(term : Int, success : Boolean)
+
+	case class AppendResult(term : Int, prevLogIndex : Int, success : Boolean)
 	
 	// two-phase commit
 	// phase 1 , pre-commit (or "replicate logs") re-use the AppendEntries class
 	// phase 2, commit
-	case class CommitLog
+	case class CommitLog(prevLogIndex : Int)
+
+  case class CommitResult(prevLogIndex : Int, success : Boolean)
 }

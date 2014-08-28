@@ -23,6 +23,9 @@ class LeaderElection extends Actor with ActorLogging {
   private val majority = nodes.size / 2 + 1
   private val logger = loggers(id)
 
+  private val dbPath : String = "some path"   // for log replication
+  private val followerLogRep : FollowerLogRep = new FollowerLogRep(dbPath)
+
   /**
    * Follower only responds to requests, never send requests to others.
    * once it does not receive HeartBeat within electionTimeout,
@@ -44,15 +47,12 @@ class LeaderElection extends Actor with ActorLogging {
 
     case ReceiveTimeout =>
       becomeCandidate(myTerm + 1)
-      
-      // for test only
-     
-      logger ! AppendEntries(index, id, 1, 1, RequestVote(9, 10), 1)
-      index += 1
-      
+
     // messages for log replications
     // TODO refactor required
-   
+    case entry : AppendEntries =>
+
+    case commit : CommitLog =>
     
   } 
   
@@ -106,7 +106,7 @@ class LeaderElection extends Actor with ActorLogging {
     case DoYouCopy(term) =>
       checkStaleLeader(term, myTerm, heartBeatSchr)
       
-    // messages for log replication
+    // messages for log replication TODO including count all successfully replicated messages
       
   }
 

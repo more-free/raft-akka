@@ -1,11 +1,13 @@
 package raft
 
 import akka.actor._
-import Protocol._
+import raft.Protocol._
 import raft.util.persistence._
 
-class LeaderLogRep (followerLogReps : Seq[ActorRef], dbPath : String) extends Actor with ActorLogging {
+class LeaderLogRep (followers : Seq[ActorRef], dbPath : String) extends Actor with ActorLogging {
 	private val db = new LogManager(dbPath)
+  db.keyCmp = (x : String, y : String) => Integer.parseInt(x).compareTo(Integer.parseInt(y))
+
 	private var lastIndex = db.lastIndex  
 	
 	// for each logIndex, record AppendEntry confirmations it received from followers
