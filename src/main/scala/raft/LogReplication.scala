@@ -2,7 +2,7 @@ package raft
 
 import akka.actor._
 import Protocol._
-import raft.util.persistence._
+import util.persistence._
 import java.util.concurrent.atomic._
 
 /**
@@ -13,7 +13,7 @@ import java.util.concurrent.atomic._
 class LogReplication extends Actor {
   
  private val dbPath = "/Users/morefree/Developments/scala-workspace/some" + LogReplication.getDbIndex
-private val db = new LevelDB(dbPath)
+ private val db = new LevelDB(dbPath)
  println(dbPath)
   
 	def receive = {

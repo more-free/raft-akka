@@ -16,12 +16,16 @@ object Protocol {
 	 *   protocol for log replication 
 	 */
 	// TODO append log. set entry to a single String for easy test
-	case class AppendEntries (term: Int, 
+	case class AppendEntries (term : Int, 
 							 leaderId: Int, 
 							 prevLogIndex : Int, 
 							 prevLogTerm: Int, 
 							 entry : AnyRef, 
 							 leaderCommit: Int)
+							 
+	// follower must accept the entry unconditionally upon receiving
+	// it is also used for persistence 
+	case class Entry (term : Int, entry : AnyRef)
 
 	case class AppendResult(term : Int, prevLogIndex : Int, success : Boolean)
 	
@@ -30,5 +34,5 @@ object Protocol {
 	// phase 2, commit
 	case class CommitLog(prevLogIndex : Int)
 
-  case class CommitResult(prevLogIndex : Int, success : Boolean)
+    case class CommitResult(prevLogIndex : Int, success : Boolean)
 }

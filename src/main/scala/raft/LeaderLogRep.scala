@@ -1,14 +1,14 @@
 package raft
 
 import akka.actor._
-import raft.Protocol._
+import Protocol._
+import util.persistence.LogManager
 import raft.util.persistence._
 
 class LeaderLogRep (followers : Seq[ActorRef], dbPath : String) extends Actor with ActorLogging {
 	private val db = new LogManager(dbPath)
-  db.keyCmp = (x : String, y : String) => Integer.parseInt(x).compareTo(Integer.parseInt(y))
 
-	private var lastIndex = db.lastIndex  
+	private var lastIndex = db.maxIndex  
 	
 	// for each logIndex, record AppendEntry confirmations it received from followers
 	
@@ -22,7 +22,7 @@ class LeaderLogRep (followers : Seq[ActorRef], dbPath : String) extends Actor wi
 	    // send AppendEntries to all followers until each of them succeeds, 
 	    // but only wait for confirmation from the majority before it sends CommitLog 
 	    // to all followers
-	    followerLogReps.foreach(_ ! e)
-	    
+	    followers.foreach(_ ! e)    
+	    //TODO build LogKeeper actors, send message to logKeepers
 	}
 }

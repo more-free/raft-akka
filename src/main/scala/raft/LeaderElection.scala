@@ -48,10 +48,17 @@ class LeaderElection extends Actor with ActorLogging {
     case ReceiveTimeout =>
       becomeCandidate(myTerm + 1)
 
-    // messages for log replications
-    // TODO refactor required
+    /* messages for log replications */
+   
+    // appendEntry request from clients. forward to leader
     case entry : AppendEntries =>
-
+    	leader ! entry  // TODO store clients - entry mapping
+    
+    // entry from leader. accept it unconditionally
+    case entry : Entry => 
+      	followerLogRep.replicateLogNow(entry)
+    
+    // TODO commit log and return result to client
     case commit : CommitLog =>
     
   } 

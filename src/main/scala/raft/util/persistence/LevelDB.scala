@@ -17,10 +17,10 @@ class LevelDB (dbPath : String) {
 	def put(key : String, value : Array[Byte]) = db.put(bytes(key), value)
 	def get(key : String) = db.get(bytes(key))
 	
-	/** return 0 if log is empty */
+	/** return -1 if log is empty */
 	def maxKey = {
 	  val iter = db.iterator
-	  var mk = "0"
+	  var mk = "-1"
 	  try {
 		iter.seekToFirst
 	  	while(iter.hasNext) {

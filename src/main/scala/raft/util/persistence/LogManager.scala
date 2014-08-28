@@ -3,30 +3,29 @@ package raft.util.persistence
 import POJO._
 
 // TODO  write every method in a non-blocking fashion
+/** key = prevLogIndex , value = Entry(term, entry) */
 class LogManager (dbPath : String) {
 	private val db : LevelDB = new LevelDB(dbPath)
 	db.open
 		
-	var lastKey : String = _
-	var lastValue : AnyRef = _
+	private var lastKey : Int = _
+	private var lastValue : AnyRef = _
 
-  var maxKey : String = _
-  var keyCmp : (String, String) => Int = (x, y) => x.compareTo(y)
+	private var maxKey : Int = -1
 	
-	def put(key : String, value : AnyRef) = {
-	  db.put(key, serialize(value))
+	def put(key : Int, value : AnyRef) = {
+	  db.put(key.toString, serialize(value))
 	  lastKey = key
 	  lastValue = value
 
-    updateMaxKey(key)
+	  updateMaxKey(key)
 	}
 
-  private def updateMaxKey(key : String) = {
-    if(keyCmp(maxKey, key) < 0)
-      maxKey = key
-  }
+	private def updateMaxKey(key : Int) =  { 
+	  maxKey = Math.max(maxKey, key)
+	}
 	
-	def putIfTrue(key : String, value : AnyRef, condition : () => Boolean) = {
+	def putIfTrue(key : Int, value : AnyRef, condition : () => Boolean) = {
 	  if(condition()) put(key, value)
 	}
 	
@@ -35,8 +34,10 @@ class LogManager (dbPath : String) {
 	 */
 	// def lastIndex = db.maxKey
 
-  /** not expensive */
-  def lastIndex = maxKey
+	/** not expensive */
+	def maxIndex = maxKey
 
-  def get(key : String) = db.get(key)
+	def get(key : Int) = deserialize(db.get(key.toString))
+	
+	def close = db.close
 }
