@@ -6,6 +6,7 @@ import util.persistence._
 import java.util.concurrent.atomic._
 
 /**
+ * FOR TEST ONLY
  * asyc log replication
  * T is the type of "event", which typically is a case class with type T representing the command from client
  */
@@ -18,7 +19,7 @@ class LogReplication extends Actor {
   
 	def receive = {
 	  case e : AppendEntries => 
-	    println("id = " + e.leaderId)
+	    println("prevLogIndex = " + e.prevLogIndex)
 	    asyncWrite(e)
 	}
 	
@@ -27,7 +28,7 @@ class LogReplication extends Actor {
 		db.open
 		try {
 		  println(e.entry.getClass)
-		  db.put(e.term.toString, POJO.serialize(e.entry.asInstanceOf[Object]))
+		  db.put(e.prevLogTerm.toString, POJO.serialize(e.entry.asInstanceOf[Object]))
 		} finally {
 		  db.close
 		}

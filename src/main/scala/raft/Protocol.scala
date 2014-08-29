@@ -15,24 +15,34 @@ object Protocol {
 	/**
 	 *   protocol for log replication 
 	 */
-	// TODO append log. set entry to a single String for easy test
-	case class AppendEntries (term : Int, 
-							 leaderId: Int, 
+	case class AppendEntries (
 							 prevLogIndex : Int, 
 							 prevLogTerm: Int, 
-							 entry : AnyRef, 
-							 leaderCommit: Int)
-							 
-	// follower must accept the entry unconditionally upon receiving
-	// it is also used for persistence 
+							 entry : AnyRef
+							 )
+
+  /** prevLogIndex and prevLogTerm are set to the last entry in follower's DB */
+  case class AppendResult(lastLogIndex : Int, lastLogTerm : Int, success : Boolean)
+
+  // it is used for persistence only
 	case class Entry (term : Int, entry : AnyRef)
 
-	case class AppendResult(term : Int, prevLogIndex : Int, success : Boolean)
-	
+
 	// two-phase commit
 	// phase 1 , pre-commit (or "replicate logs") re-use the AppendEntries class
 	// phase 2, commit
-	case class CommitLog(prevLogIndex : Int)
+	case class CommitLog(logIndex : Int)
 
-    case class CommitResult(prevLogIndex : Int, success : Boolean)
+  // can also serve as response to client request (to replace FollowerResponse)
+  case class CommitResult(lastLogIndex : Int, success : Boolean)
+
+
+  /** protocol for client requests (it can be easily extended to complicated B/S protocols) */
+  case class ClientRequest(requestId : Int, entry : AnyRef)
+  case class ClientResponse(responseId : Int, result : AnyRef, status : Int) // state after appending entry
+  case class Retry()  // leader has not been elected yet, ask client to retry instead of blocking the thread
+
+  /** intermediate protocols */
+  case class LeaderRequest(clientRequest : ClientRequest, term : Int)
+  case class FollowerResponse(clientResponse : ClientResponse)
 }

@@ -3,17 +3,31 @@ package raft
 import org.junit._
 import java.util.concurrent._
 import raft.util.persistence._
+import akka.actor._
+import raft._
+import raft.Protocol.{Entry, ClientRequest}
 
 class TestLeaderElection {
   //@Test
   def testLeader = {
-    println("Hello, World")
+    val dbPaths = Array(
+      "C:\\log\\raft\\some1",
+      "C:\\log\\raft\\some2",
+      "C:\\log\\raft\\some3",
+      "C:\\log\\raft\\some4",
+      "C:\\log\\raft\\some5"
+    )
+
+    LeaderElection.nodes =
+      (1 to 5 toList) map (n => LeaderElection.system.actorOf(Props(new LeaderElection(dbPaths(n - 1))), name = n.toString))
+
     LeaderElection.start
     TimeUnit.SECONDS.sleep(15)
     LeaderElection.stop
   }
-  
-  @Test
+
+
+  //@Test
   def testSerializeCaseClassesWithPojoAndLevelDB = {
     val dbPath = "/Users/morefree/Developments/scala-workspace/some4"
     val db = new LevelDB(dbPath)
@@ -81,5 +95,39 @@ class TestLeaderElection {
     println(POJO.deserialize(db2.get("l1")))
     println(POJO.deserialize(db2.get("l2")))
     db2.close
+  }
+
+  @Test
+  def testSomething = {
+    println("something happened")
+  }
+
+  @Test
+  def testLogReplication = {
+    // create server-side actors
+    val dbPaths = Array(
+      "C:\\log\\raft\\some1",
+      "C:\\log\\raft\\some2",
+      "C:\\log\\raft\\some3",
+      "C:\\log\\raft\\some4",
+      "C:\\log\\raft\\some5"
+    )
+
+    LeaderElection.nodes =
+      (1 to 2 toList) map (n => LeaderElection.system.actorOf(Props(new LeaderElection(dbPaths(n - 1))), name = n.toString))
+
+
+    // kick off
+    LeaderElection.start
+
+    // wait for leader being elected
+    TimeUnit.SECONDS.sleep(5)
+
+    // create client
+    LeaderElection.nodes.foreach(a => a ! ClientRequest(1, "some command"))
+
+    TimeUnit.SECONDS.sleep(15)
+
+    LeaderElection.stop
   }
 }

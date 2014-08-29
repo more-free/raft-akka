@@ -4,10 +4,12 @@ import akka.actor._
 import akka.actor.Actor.Receive
 import scala.concurrent.duration._
 import Protocol._
+import scala.collection.mutable.Map
+import raft.util.persistence.LogManager
 
 case class Tick()
 
-class LeaderElection extends Actor with ActorLogging {
+class LeaderElection(dbPath : String) extends Actor with ActorLogging {
   import LeaderElection._
   import LeaderElection.Role._
 
@@ -21,10 +23,13 @@ class LeaderElection extends Actor with ActorLogging {
   private val others = nodes.filterNot(_ eq self)
   private val id = nodes.indexWhere(_ eq self)
   private val majority = nodes.size / 2 + 1
-  private val logger = loggers(id)
 
-  private val dbPath : String = "some path"   // for log replication
-  private val followerLogRep : FollowerLogRep = new FollowerLogRep(dbPath)
+  private val logManager = new LogManager(dbPath)
+  private val followerLogRep : FollowerLogRep = new FollowerLogRep(logManager)
+
+  // key = requestId , value = ActorRef of client
+  private val clientRequests = Map[Int, ActorRef]()
+  private var leaderLogRepActor : ActorRef = _
 
   /**
    * Follower only responds to requests, never send requests to others.
@@ -51,16 +56,24 @@ class LeaderElection extends Actor with ActorLogging {
     /* messages for log replications */
    
     // appendEntry request from clients. forward to leader
+    case request : ClientRequest =>
+      // if leader has not been elected, then tell client to retry
+      if(leader == null)
+        sender() ! Retry
+      else {
+        clientRequests += (request.requestId -> sender())
+        leader ! request
+      }
+
+    // appendEntry request from leader.
+    // delegate to followerLogRep (not a actor) and return AppendResult to sender (LogSynchronizer actor)
     case entry : AppendEntries =>
-    	leader ! entry  // TODO store clients - entry mapping
-    
-    // entry from leader. accept it unconditionally
-    case entry : Entry => 
-      	followerLogRep.replicateLogNow(entry)
-    
-    // TODO commit log and return result to client
+      sender() ! followerLogRep.replicateLog(entry)
+
+    // from LogSynchronizer . commit log, return response to client,  return CommitResult to leader
     case commit : CommitLog =>
-    
+      // return CommitResult to LogSynchronizer, then to LeaderLogRep, then to Leader.
+      sender() ! commitLog(commit)
   } 
   
   private var index = 1
@@ -103,6 +116,10 @@ class LeaderElection extends Actor with ActorLogging {
     // in case any network delay / partition, or other failure
     case RequestVote(term, candidateId) =>
       checkStaleCandidate(term, myTerm)
+
+    // no leader found. just tell client to re-try. this is the non-blocking fashion
+    case request : ClientRequest =>
+      sender ! Retry
   }
 
   def leader(myTerm: Int, heartBeatSchr: Cancellable): Receive = {
@@ -112,10 +129,46 @@ class LeaderElection extends Actor with ActorLogging {
       checkStaleLeader(term, myTerm, heartBeatSchr)
     case DoYouCopy(term) =>
       checkStaleLeader(term, myTerm, heartBeatSchr)
-      
-    // messages for log replication TODO including count all successfully replicated messages
-      
+
+    // requests from client directly or indirectly (forwarded by followers)
+    // note leader will never receive AppendEntries requests ( either from client or followers )
+    case request : ClientRequest =>
+      if(others.indexOf(sender()) < 0) // it comes from client directly, not from followers
+        clientRequests.put(request.requestId, sender())
+
+      if(leaderLogRepActor == null)
+        leaderLogRepActor = context.actorOf(Props(new LeaderLogRep(others, logManager)))
+      // wrap client request as LeaderRequest with leader's current term
+      leaderLogRepActor ! LeaderRequest(request, myTerm)
+
+    // commit log , send response to client, send result to self
+    case e : CommitLog =>
+      self ! commitLog(e)
+
+    // commit results. do nothing.
+    case result : CommitResult =>
+
   }
+
+  // TODO this should be an abstract method which depends on different implementations
+  private def commitLog(e : CommitLog) : CommitResult = {
+    // for instance, for ZooKeeper like application, this should change the status of znode
+    // and return corresponding result according to different command types
+
+    // for test purpose, here just print out the message to be committed
+    println("log entry " + e.logIndex + " was committed : ) " + " by id = " + id)
+
+    // TODO send response back to the clients
+    // return result to client. in order to return response to client, it should be
+    // able to find sender() from ClientRequest based on requestId. One possible solution
+    // is including requestId in all messages, another way is to construct mapping between
+    // e.logIndex and requestId.
+
+
+    // return result to invoker
+    CommitResult(e.logIndex, true)
+  }
+
 
   private def checkStaleLeader(term: Int, myTerm: Int, heartBeatSchr: Cancellable) = {
     if (term > myTerm) {
@@ -173,24 +226,17 @@ class LeaderElection extends Actor with ActorLogging {
 object LeaderElection {
   val heartBeatPeriod = 200 milliseconds
   val electionTimeoutRange = 1000 to 2000
-  lazy val system = ActorSystem("raft")
-  lazy val nodes = (1 to 5 toList) map ("node-" + _) map (n => system.actorOf(Props[LeaderElection], name = n))
-  lazy val loggers = (1 to 5 toList) map ("logger-" + _) map (n => system.actorOf(Props[LogReplication], name = n))
-  
+
+  var nodes : Seq[ActorRef] = _ // set externally
+  val system = ActorSystem("raft")
+
   object Role extends Enumeration {
     type Role = Value
     val Follower, Candidate, Leader = Value
   }
 
-  /**
-   * kick off leader election
-   */
   def start = nodes.foreach(_ ! Tick)
-
-  /**
-   * shut down actor system
-   */
-  def stop = system.shutdown
+  def stop = system.shutdown()
 }
   
   

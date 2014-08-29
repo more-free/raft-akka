@@ -7,9 +7,11 @@ import POJO._
 class LogManager (dbPath : String) {
 	private val db : LevelDB = new LevelDB(dbPath)
 	db.open
-		
-	private var lastKey : Int = _
-	private var lastValue : AnyRef = _
+
+  /** for raft's log management, actually lastKey is always the maxKey.
+    * logIndex is increasing. no out-of-order happens */
+  var lastKey : Int = -1
+	var lastValue : AnyRef = _
 
 	private var maxKey : Int = -1
 	
@@ -37,7 +39,11 @@ class LogManager (dbPath : String) {
 	/** not expensive */
 	def maxIndex = maxKey
 
-	def get(key : Int) = deserialize(db.get(key.toString))
+	def get(key : Int) = {
+    val data = db.get(key.toString)
+    if(data == null) null
+    else deserialize(db.get(key.toString))
+  }
 	
 	def close = db.close
 }
