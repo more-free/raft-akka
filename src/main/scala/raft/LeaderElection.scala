@@ -1,5 +1,7 @@
 package raft
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor._
 import akka.actor.Actor.Receive
 import scala.concurrent.duration._
@@ -20,9 +22,9 @@ class LeaderElection(dbPath : String) extends Actor with ActorLogging {
   private var leader : ActorRef = _
   private var role = Follower
 
-  private val others = nodes.filterNot(_ eq self)
-  private val id = nodes.indexWhere(_ eq self)
-  private val majority = nodes.size / 2 + 1
+  private def others = nodes.filterNot(_ eq self)
+  private def id = nodes.indexWhere(_ eq self)
+  private def majority = nodes.size / 2 + 1
 
   private val logManager = new LogManager(dbPath)
   private val followerLogRep : FollowerLogRep = new FollowerLogRep(logManager)
@@ -74,6 +76,9 @@ class LeaderElection(dbPath : String) extends Actor with ActorLogging {
     case commit : CommitLog =>
       // return CommitResult to LogSynchronizer, then to LeaderLogRep, then to Leader.
       sender() ! commitLog(commit)
+
+    case CleanAndClose =>
+       cleanAndClose
   } 
   
   private var index = 1
@@ -120,6 +125,9 @@ class LeaderElection(dbPath : String) extends Actor with ActorLogging {
     // no leader found. just tell client to re-try. this is the non-blocking fashion
     case request : ClientRequest =>
       sender ! Retry
+
+    case CleanAndClose =>
+      cleanAndClose
   }
 
   def leader(myTerm: Int, heartBeatSchr: Cancellable): Receive = {
@@ -139,6 +147,7 @@ class LeaderElection(dbPath : String) extends Actor with ActorLogging {
       if(leaderLogRepActor == null)
         leaderLogRepActor = context.actorOf(Props(new LeaderLogRep(others, logManager)))
       // wrap client request as LeaderRequest with leader's current term
+
       leaderLogRepActor ! LeaderRequest(request, myTerm)
 
     // commit log , send response to client, send result to self
@@ -148,6 +157,8 @@ class LeaderElection(dbPath : String) extends Actor with ActorLogging {
     // commit results. do nothing.
     case result : CommitResult =>
 
+    case CleanAndClose =>
+      cleanAndClose
   }
 
   // TODO this should be an abstract method which depends on different implementations
@@ -156,7 +167,7 @@ class LeaderElection(dbPath : String) extends Actor with ActorLogging {
     // and return corresponding result according to different command types
 
     // for test purpose, here just print out the message to be committed
-    println("log entry " + e.logIndex + " was committed : ) " + " by id = " + id)
+    log.info("log entry " + e.logIndex + " was committed : ) " + " by id = " + id)
 
     // TODO send response back to the clients
     // return result to client. in order to return response to client, it should be
@@ -217,6 +228,18 @@ class LeaderElection(dbPath : String) extends Actor with ActorLogging {
     }
   }
 
+  private def cleanAndClose = {
+    // TODO for test only . print all logs before closing
+    val identity = if(leader == self) "Leader" else "Follower"
+    val sign = "id = " + this.id + ", identity = " + identity
+    logManager.entrySet.foreach(e => {
+      // log.info will disorder the output
+      println(sign + "  key = " + e._1 + ", value = " + e._2.asInstanceOf[Entry])
+    } )
+
+    logManager.close
+  }
+
   def receive = {
     case Tick =>
       becomeFollower(false, 0)
@@ -235,7 +258,15 @@ object LeaderElection {
     val Follower, Candidate, Leader = Value
   }
 
+  case class CleanAndClose()
+
   def start = nodes.foreach(_ ! Tick)
+
+  // for test only
+  def clean = {
+    nodes.foreach(_ ! CleanAndClose)
+  }
+
   def stop = system.shutdown()
 }
   

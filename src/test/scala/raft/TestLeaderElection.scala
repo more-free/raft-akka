@@ -113,8 +113,10 @@ class TestLeaderElection {
       "C:\\log\\raft\\some5"
     )
 
+    deleteIfExist(dbPaths)
+
     LeaderElection.nodes =
-      (1 to 2 toList) map (n => LeaderElection.system.actorOf(Props(new LeaderElection(dbPaths(n - 1))), name = n.toString))
+      (1 to 5 toList) map (n => LeaderElection.system.actorOf(Props(new LeaderElection(dbPaths(n - 1))), name = n.toString))
 
 
     // kick off
@@ -123,11 +125,36 @@ class TestLeaderElection {
     // wait for leader being elected
     TimeUnit.SECONDS.sleep(5)
 
-    // create client
+    // send sample client request
+    // NOTE : the log output should contains 5 of each items, i.e., 5 "some command", 5 "more command",
+    // etc. , because both leader and followers will receive the command, and followers will forward the command
+    // to leader without processing it.
     LeaderElection.nodes.foreach(a => a ! ClientRequest(1, "some command"))
+    LeaderElection.nodes.foreach(a => a ! ClientRequest(2, "more command"))
+    LeaderElection.nodes.foreach(a => a ! ClientRequest(3, "too more command"))
+    LeaderElection.nodes.foreach(a => a ! ClientRequest(4, "yet another command"))
 
-    TimeUnit.SECONDS.sleep(15)
+    TimeUnit.SECONDS.sleep(5)
 
+    // print all logs, close DB and shut down
+    // by the end of the test, all logs of all actors should be exactly the same
+    LeaderElection.clean
+    TimeUnit.SECONDS.sleep(5)
     LeaderElection.stop
+  }
+
+
+  private def deleteIfExist(paths : Array[String]) = {
+    val files = paths.map(new java.io.File(_)).filter(_.exists()).foreach(deleteFile)
+  }
+
+  // java 6 style deletion
+  private def deleteFile(file : java.io.File) : Unit = {
+    if(file.exists()) {
+      if (file.isDirectory)
+        file.listFiles().foreach(deleteFile)
+
+      file.delete()
+    }
   }
 }

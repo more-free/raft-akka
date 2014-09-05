@@ -9,7 +9,7 @@ import scala.collection.mutable.Map
  * Created by kexu1 on 8/27/14.
  * Owned by Leader Actor
  */
-class LogSynchronizer (leaderLogRep : ActorRef, follower : ActorRef, db : LogManager) extends Actor with ActorLogging {
+class LogSynchronizer (val leaderLogRep : ActorRef, val follower : ActorRef, val db : LogManager) extends Actor with ActorLogging {
   /** key = logIndex (which is prevLogIndex + 1), value = entry.
     * all pending entries have already been written to DB. */
   private val pendingEntries = Map[Int, AppendEntries]()
@@ -36,23 +36,43 @@ class LogSynchronizer (leaderLogRep : ActorRef, follower : ActorRef, db : LogMan
         val prevEntry = db.get(response.lastLogIndex).asInstanceOf[Entry]
         if(prevEntry.term == response.lastLogTerm) {
           val nextEntry = db.get(response.lastLogIndex + 1).asInstanceOf[Entry]
-          follower ! AppendEntries(response.lastLogIndex, response.lastLogTerm, nextEntry.entry)
+          if(nextEntry != null) {
+            follower ! AppendEntries(response.term,
+              response.lastLogIndex,
+              response.lastLogTerm,
+              nextEntry.entry)
+          }
         } else {
           // send the previous entry, and hopefully the follower could accept it
-          follower ! AppendEntries(response.lastLogIndex - 1,
+          follower ! AppendEntries(response.term,
+                                   response.lastLogIndex - 1,
                                    db.get(response.lastLogIndex - 1).asInstanceOf[Entry].term,
                                    prevEntry.entry)
         }
-
+      // success
       } else {
         // may not exist (due to node failure)
         pendingEntries.remove(response.lastLogIndex)
+
+        /* the commented logic is not correct. it is possible that leader's DB contains 0 and 1,
+           whereas pendingEntries only contains 0 (1 might be in the actor's message box). In this
+           case, there might be duplicate messages on the follower side.
+           to make it simple, here just leave it, and during the next iteration, it wil try to recover
+           the next consistent entry if any.
 
         // re-send all entries after the last consistent entry.
         val nextLogIndex = response.lastLogIndex + 1
         if( !pendingEntries.contains(nextLogIndex) ) {
           val nextEntry = db.get(nextLogIndex).asInstanceOf[Entry]
-          follower ! AppendEntries(response.lastLogIndex, response.lastLogTerm, nextEntry)
+          if(nextEntry != null) { // if db contains the next entry, then send it
+            follower ! AppendEntries(response.term,
+              response.lastLogIndex,
+              response.lastLogTerm,
+              nextEntry.entry)
+          }
+         */
+        if(false) {
+
         } else {
           // normal case, no failure happened
           // notify leader

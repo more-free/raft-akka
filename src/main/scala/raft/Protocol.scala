@@ -16,13 +16,18 @@ object Protocol {
 	 *   protocol for log replication 
 	 */
 	case class AppendEntries (
+               term : Int,  // leader's term
 							 prevLogIndex : Int, 
 							 prevLogTerm: Int, 
 							 entry : AnyRef
 							 )
 
   /** prevLogIndex and prevLogTerm are set to the last entry in follower's DB */
-  case class AppendResult(lastLogIndex : Int, lastLogTerm : Int, success : Boolean)
+  case class AppendResult(
+               term : Int, // the same value as AppendEntries. that's necessary for async communication (rather than sync RPC)
+               lastLogIndex : Int,
+               lastLogTerm : Int,
+               success : Boolean)
 
   // it is used for persistence only
 	case class Entry (term : Int, entry : AnyRef)

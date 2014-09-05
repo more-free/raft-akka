@@ -6,16 +6,16 @@ import raft.util.persistence._
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
-class LeaderLogRep (followers : Seq[ActorRef], db : LogManager) extends Actor with ActorLogging {
+class LeaderLogRep (val followers : Seq[ActorRef], val db : LogManager) extends Actor with ActorLogging {
 
-  private val logSynchronizers = followers.map( s => context.actorOf(Props(new LogSynchronizer(self, s, db))))
+  private lazy val logSynchronizers = followers.map( s => context.actorOf(Props(new LogSynchronizer(self, s, db))))
   // key = logIndex, value = number of successful replication
   private val replicated = Map[Int, Int]()
   // key = logIndex, value = logSynchronizers with outgoing commitLog
   private val committed = Map[Int, Set[ActorRef]]()
   private val majority = followers.size / 2 + 1
 
-	def receive = {
+	override def receive = {
 	  // from clients (maybe indirectly from clients : followers forward client requests to leader)
 	  case request : LeaderRequest =>
 	    // increment log index and write to leader's log
@@ -29,13 +29,13 @@ class LeaderLogRep (followers : Seq[ActorRef], db : LogManager) extends Actor wi
 	    // to all followers
       val prevEntry = db.get(logIndex - 1)
       val appendEntry =
-        if(prevEntry == null) AppendEntries(-1, -1, request.clientRequest.entry)
-        else AppendEntries(logIndex - 1, prevEntry.asInstanceOf[Entry].term, request.clientRequest.entry)
+        if(prevEntry == null) AppendEntries(request.term, -1, -1, request.clientRequest.entry)
+        else AppendEntries(request.term, logIndex - 1, prevEntry.asInstanceOf[Entry].term, request.clientRequest.entry)
 
       logSynchronizers.foreach( s =>  s ! appendEntry)
 
 
-
+    // result from logSynchronizer (not from follower)
     // wait for majority of followers sending result (success)
     case result : AppendResult =>  // only successful result will be returned
       val newCount = replicated.getOrElse(result.lastLogIndex, 0) + 1 // increment by one
@@ -57,7 +57,7 @@ class LeaderLogRep (followers : Seq[ActorRef], db : LogManager) extends Actor wi
       } else {
         // add logSynchronizer in charge to committed map
         val newSet = committed.getOrElse(result.lastLogIndex, Set[ActorRef](context.parent)) // including leader
-        newSet += logSynchronizers(followers.indexOf(sender()))  // add sender to set
+        newSet += sender() // add sender to set, sender is logSynchronizer actor
         committed += (result.lastLogIndex -> newSet) // update map
       }
 

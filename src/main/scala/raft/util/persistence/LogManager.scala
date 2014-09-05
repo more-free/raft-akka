@@ -44,6 +44,10 @@ class LogManager (dbPath : String) {
     if(data == null) null
     else deserialize(db.get(key.toString))
   }
+
+  def entrySet : Seq[(String, AnyRef)]= {
+    db.entrySet.map(t => (t._1, deserialize(t._2)))
+  }
 	
 	def close = db.close
 }
